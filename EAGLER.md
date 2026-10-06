@@ -60,11 +60,18 @@ IDBFS owns `/savesth15`: `scoreth15.dat`, `th15.cfg`, original-compatible Replay
 files, and Pointdevice checkpoint files under `autosave`. `/save` is an alias of
 that save root, never of Package content. The shell validates imported game files.
 
+## High-refresh presentation
+
+The canonical `eagler` branch implements fixed-60-Hz logic with display-paced
+immutable Draw transaction interpolation. The experiment branch preserves its
+implementation and validation history. See
+[implementation and evidence](th15_web/docs/EAGLER-HIGH-REFRESH-IMPLEMENTATION.md).
+Full Presentation Lab admission and physical-phone acceptance remain incomplete.
+
 ## Scope and verification
 
 This is a basic test adapter, not a claim that all mandatory adapter obligations
-are complete. No high-refresh, Multiplayer, THPrac or downloadable languages are
-advertised. Standardized physical-gamepad semantics, always-hitbox, complete touch
+are complete. Multiplayer, THPrac and downloadable languages are not advertised. Standardized physical-gamepad semantics, always-hitbox, complete touch
 conformance, and the shared quick/daily golden Replay verifier remain follow-up
 work. The original logic stays at 60 Hz. No new gameplay oracle was generated.
 

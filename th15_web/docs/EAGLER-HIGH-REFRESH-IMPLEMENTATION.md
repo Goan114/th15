@@ -1,6 +1,6 @@
 # TH15 高刷实施记录
 
-日期：2026-10-06。实现位于 `experiment/th15-high-refresh`，canonical `th15-eagler/eagler` 仍为 `eaf0fb5`，尚未推广或推送本次代码。
+日期：2026-10-06。实现位于 `experiment/th15-high-refresh`，canonical `th15-eagler/eagler` 当前为 `b8bc2cb`（已加入加载缓冲；高刷仍未推广），尚未推广或推送本次代码。
 
 ## 身份与行为
 
@@ -17,8 +17,8 @@ TH15 的原始 Draw 有章节过渡、ASCII 队列清理、Replay 名称写入�
 
 ## 验证边界
 
-Development Wasm：`7461967949f78e974de949d2572e12767ac45c4755a3a49dcdb92ec8280e53f0`，2242868 bytes。
-Release Wasm：`910e5bea4d04e5d1f707b7b08cafe27204327162bc70f8f6254448899dbd3901`，1980698 bytes。
+高刷核心原始提交 `dc4309b` 的 Development Wasm：`7461967949f78e974de949d2572e12767ac45c4755a3a49dcdb92ec8280e53f0`，2242868 bytes。
+高刷核心原始提交 `dc4309b` 的 Release Wasm：`910e5bea4d04e5d1f707b7b08cafe27204327162bc70f8f6254448899dbd3901`，1980698 bytes。
 生产导出检查通过：没有 `application_*`、`th15_probe_*`、`audit_*`、`presentation_lab_*`；存在 `th15_limit_presentation`。
 
 固定版本 common 的 controller/release-contract 共 8 项通过；shell/managed 与新测试语法检查、diff whitespace 检查通过。
@@ -50,3 +50,13 @@ Presentation Lab 只观测 Player 顶点，其他视觉 owner 的完整观察覆
 本地复现：先设置 `TH15_EMSDK` 与私有原作 `TH15_ORIGINAL_DAT`，并提供 measured fonts；运行 `node th15_web/scripts/build-sdl-application.mjs --profile`，然后 `node --test th15_web/tests/sdl/high-refresh-browser.test.mjs`。OGG 模式另设置 `TH15_HIGH_REFRESH_MUSIC` 为上述三首 OGG 所在目录。三项场景回归设置 `TH15_PRESENTATION_TEST=1`，运行 `render-loading-lifecycle-browser.test.mjs`、`archive-completion-browser.test.mjs` 和 `checkpoint-persistence-browser.test.mjs`。Release 使用 `--release`。
 
 忽略目录内报告：`artifacts/cpp/verification/high-refresh-cadence.json` 与 `high-refresh-cadence-music.json`；最终日志 `final-high-refresh-fresh-browser.log`、`final-high-refresh-music-complete-input.log`、`final-high-refresh-lifecycle.log`。源码与验收记录提交；Wasm、DAT、fonts、音乐和报告不提交。
+
+## 加载缓冲同步
+
+canonical 加载缓冲提交 `b8bc2cb` 已移植为实验提交 `9ccd891`。启动、游戏入场与换关加载画面至少保留 1000ms；资源准备计入该时间，慢加载不额外再等待整秒。等待分支不采样输入、不执行游戏 step，清除逻辑积压；高刷检测和插值缓存同时重置。恢复后 FPS 采样窗口重新开始，加载时间不混入游戏 FPS。
+
+实际浏览器使用系统时间等待；诊断单步接口继续用于原作事务验证，不将逐 tick 模拟伪装成一秒墙钟。高刷 cadence 测试在开始模拟 RAF 前明确等待诊断准备画面的期限结束；独立 loading-buffer 测试验证真实 RAF 的缓冲。原有 bounded catchup 仍允许正常慢 RAF 中执行最多四次逻辑更新，测试不要求恢复时每次 RAF 必须恰好一次更新。
+
+canonical Development / Release 都重新构建，实际加载缓冲与 2x / 祈祷画面 / Stage Clear 移动回归通过；生产无诊断导出。实验分支重新构建与复验结果见下方。测试第一次因夹具跨 Playwright 调用时期限已过失败，改为在浏览器内立刻启动等待并记录实际时间；另一次误把正常 RAF catchup 判断为必须单 tick，改为核对原有 bounded 行为。失败日志保留。
+
+加载缓冲同步后的实验 Development Wasm：`0d4d89802200b4f2a111673030864604966d82f0ea8cdb09fdede079edb4a4ad`，2243441 bytes；Release：`547b5bc450fd024bbdcd1ea03b6e05b7c38b943e85dd8206e65b752985da7d6b`，1981099 bytes。生产导出检查通过。`loading-buffer-browser.test.mjs` 与 `high-refresh-browser.test.mjs` 组合 2 项通过，五档 RAF 仍各执行 120 tick / 2 秒，帧率限制仍为 60 tick / 60 呈现每秒。日志：`artifacts/loading-buffer-high-verification.log`。同步后这一轮音乐关闭；此前 OGG 证据属于高刷核心原始版本，不升级为新组合的全音频验收。

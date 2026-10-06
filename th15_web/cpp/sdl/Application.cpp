@@ -51,6 +51,7 @@ bool ApplicationState::prepare_loading(){
  return draw_loading(true);
 }
 bool ApplicationState::draw_loading(bool signature){
+ graphics.presentation.reset();
  if(!loading_animations.retire(loading_signature)||!loading_animations.retire(loading_prayer))return fail(loading_animations.error);
  if(signature){loading_signature=loading_animations.create(1,0);if(!loading_signature)return fail(loading_animations.error);}
  loading_prayer=loading_animations.create(2,17,-1,0,{960,784,0});if(!loading_prayer)return fail(loading_animations.error);
@@ -93,6 +94,7 @@ bool ApplicationState::initialize(bool device){
 ApplicationState::~ApplicationState(){title.reset();ending.reset();release_run();for(auto& c:animation_updates)scheduler.remove(c);fades.clear();display.reset();scene_effects.reset();animations.resource_release=nullptr;}
 bool ApplicationState::save_settings(){if(!finish_checkpoint())return false;config.bytes[0x22]=u8(volumes.music_volume);config.bytes[0x23]=u8(volumes.sound_volume);config.bytes[0x24]=volumes.controller_option;std::memcpy(config.bytes.data()+4,controller.values.data(),20);return files.save(records,config)||fail(files.error);}
 void ApplicationState::release_run(){
+ graphics.presentation.reset();
  const bool had_run=run!=nullptr;close_options();motion.clear();if(display)display->detach();pause.reset();flow.reset();initialization.reset();session.reset();
  if(run&&scene()){selection_player=scene()->battle.session;selection_score=scene()->battle.score;}
  run.reset();if(had_run){fades.clear();for(const auto bank:{0,2,8})animations.retire_resource(bank);restart_handle=restart_effect_handle=transition_overlay=0;}animations.collect_resources();for(auto& callback:animation_updates)callback.enabled=true;

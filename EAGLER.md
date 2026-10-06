@@ -60,6 +60,13 @@ IDBFS owns `/savesth15`: `scoreth15.dat`, `th15.cfg`, original-compatible Replay
 files, and Pointdevice checkpoint files under `autosave`. `/save` is an alias of
 that save root, never of Package content. The shell validates imported game files.
 
+## High-refresh experiment
+
+The isolated `experiment/th15-high-refresh` worktree implements fixed-60-Hz
+logic with display-paced immutable Draw transaction interpolation. See
+[implementation and evidence](th15_web/docs/EAGLER-HIGH-REFRESH-IMPLEMENTATION.md).
+Canonical promotion and full Presentation Lab admission are separate gates.
+
 ## Scope and verification
 
 This is a basic test adapter, not a claim that all mandatory adapter obligations

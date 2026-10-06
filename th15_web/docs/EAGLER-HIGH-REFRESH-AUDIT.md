@@ -1,6 +1,6 @@
 # TH15 高刷：实施前审计与验收方案
 
-日期：2026-10-06。状态：完成 Draw 入口与关键副作用的源码审计；尚未实施高刷。
+日期：2026-10-06。本文保存实施前审计；实现与当前验收结果见 [实施记录](EAGLER-HIGH-REFRESH-IMPLEMENTATION.md)。
 这份文档不代表完整状态覆盖，也不代表 TH15 已通过 Presentation Lab。
 
 ## 基线与参考
@@ -13,7 +13,7 @@
   不是仅供原作比较的 Presentation 捕获入口。
 - TH10 固定的 common 子模块：`8316c4f861dedb67e1e0e7be75ddcf0b90f63448`。
 - 工作区 common：`7086762de0160d2f5eb2ec1db6192f52b185d846`。
-  两者不能混作同一版本；TH15 当前没有固定 common 子模块。
+  两者不能混作同一版本；审计时 TH15 尚未固定 common 子模块；实现已固定下述 TH10 revision。
 - 规范：`eagler-touhou/docs/ADAPTING_A_GAME.md`、
   `ADAPTER_CAPABILITIES.md`、`ADAPTER_BEHAVIOR_INVARIANTS.md`，
   `docs/playbooks/interpolation.md`、`adaptation-worktrees.md`，以及
@@ -107,7 +107,7 @@ trail/distortion/custom mesh 的完整字段覆盖仍为 unknown；实施需逐�
 
 ## 验收门禁
 
-| 门禁 | 预期证据 | 当前 TH15 高刷状态 |
+| 门禁 | 预期证据 | 实施前 TH15 高刷状态 |
 | --- | --- | --- |
 | 60/120/144/165/240Hz | 实际 RAF，固定 tick/input/Replay 数量；更高显示频率 | 未运行 |
 | 开关 60Hz 限制 | 限制后无额外 Draw，逻辑及 Replay 轨迹一致 | 未实现 |

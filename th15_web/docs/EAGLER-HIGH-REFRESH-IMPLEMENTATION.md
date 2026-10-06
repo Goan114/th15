@@ -1,0 +1,52 @@
+# TH15 高刷实施记录
+
+日期：2026-10-06。实现位于 `experiment/th15-high-refresh`，canonical `th15-eagler/eagler` 仍为 `eaf0fb5`，尚未推广或推送本次代码。
+
+## 身份与行为
+
+原作 `th15/main`：`fe113b6`；Eagler base：`eaf0fb5`；实施前审计：`0614ff0`。完整变更以实验分支 HEAD 与 `eaf0fb5` 的 diff 为准，包含本记录；具体提交可从 `git log` 查询，不用生成产物替代源码身份。
+TH10 参考 `2649217`，新增 common 子模块固定 `8316c4f861dedb67e1e0e7be75ddcf0b90f63448`，测试直接导入其 analyzer，未复制 controller。
+
+逻辑、输入、Replay、音频请求、截图和 checkpoint 继续由原有 60Hz `ApplicationState::step` 事务执行。保留 TH15 已有 bounded catchup；不把 TH10 的逻辑调度直接套入 TH15。
+
+TH15 的原始 Draw 有章节过渡、ASCII 队列清理、Replay 名称写入和截图消费等副作用。因此额外显示帧不再次执行游戏 Draw，而在 GraphicsDevice 记录原始 Draw 的不可变 GPU 状态、清屏与几何提交，显示帧在临时缓冲上插值并提交。不是重复上一张截图，也不推进 ANM、ECL、RNG、输入或音频请求。两帧缓冲复用、端点索引每 tick 建立，保留原有批处理。
+
+插值按 owner/instance/generation/occurrence 识别。角色、子机、焦点、屏障、子弹、敌人、道具、射击、激光和浮动数字标记实际运动；通用 ANM 仅处理有明确曲线或速度的连续位置、旋转、缩放、颜色、透明度与 UV。STD 共用 VM 的实例有独立身份，父级重建、脚本/资源/可见性改变、年龄回退、翻转与瞬移丢弃旧端点。暂停的世界取当前状态；屏幕抖动保持当前 tick 的离散偏移，角色运动相对偏移插值。固定文字保留原字库与像素对齐，运动几何保留小数坐标。
+
+加载、资源释放、重试、checkpoint 恢复及截图复制/缩放重置缓存。RAF 检测高刷后启用额外呈现；`limitPresentationTo60` 由 shell/managed 连接原生入口，重复应用同值不重置检测。Frame Health 回报实际显示与执行 tick 数；生产构建不含诊断 ABI。
+
+## 验证边界
+
+Development Wasm：`7461967949f78e974de949d2572e12767ac45c4755a3a49dcdb92ec8280e53f0`，2242868 bytes。
+Release Wasm：`910e5bea4d04e5d1f707b7b08cafe27204327162bc70f8f6254448899dbd3901`，1980698 bytes。
+生产导出检查通过：没有 `application_*`、`th15_probe_*`、`audit_*`、`presentation_lab_*`；存在 `th15_limit_presentation`。
+
+固定版本 common 的 controller/release-contract 共 8 项通过；shell/managed 与新测试语法检查、diff whitespace 检查通过。
+启用真实额外呈现后，三项实际原作 DAT / measured fonts 浏览器回归通过：2x 栅格、进入与换关加载、Replay/Player Data 页面、Stage Clear 移动；普通六关 ending/staff/results 和 Extra 完成及 Replay 写出；六关 Pointdevice IDBFS 冷启动恢复并继续 300 帧、待编码保存删除取消。完成测试使用控制完成与测试无敌，不能当作自然通关或完整 Replay 轨迹对照。
+
+高刷测试直接比较原始权威提交端点、alpha=0/.25/.5/.75/1 与重复 alpha、每次绘制后的九模块 checkpoint 原始序列化摘要和世界状态，核对 alpha=1 像素一致与重复 alpha 像素幂等；故意强制 alpha=1 的负对照必须被 analyzer 拒绝。屏幕偏移测试独立验证离散抖动与平滑移动分离。
+
+此前共享一个浏览器反复打开完整 Runtime 页面，在并行构建时 240Hz 页面初始化超时，串行重跑也曾在后续页面初始化等待；并非已证实的游戏异常。最终测试改为每个刷新率使用独立浏览器进程，结果见下方最新验收。失败日志保留，不升级为 PASS。
+
+## 尚未验收
+
+Presentation Lab 只观测 Player 顶点，其他视觉 owner 的完整观察覆盖、Replay 游标、所有 UI 与 rollback 状态仍为 unknown；不是完整 RuntimeDriverV1/ObservationAdapterV1 Lab consumer。九模块摘要与不可变提交实现提供部分状态与机制证据，不能伪造完整纯度结论。
+实体手机/GPU 稳帧、全字段与全生命周期观察、黄金 Replay 全程对照、打包 Launcher 导入/离线/资源协议复验尚未运行。桌面 SwiftShader 的 CPU 提交时间不是移动端性能结论。OGG 验证仅在明确列出的运行范围内成立；TH15 没有 MIDI 音乐支持。
+
+根据 `docs/playbooks/adaptation-worktrees.md` 和 `interpolation.md`，canonical 推广还需完整 diff、明确所有 unknown/not-run 门禁，以及 canonical Runtime、音频、直接入口 Replay、Launcher/package 检查；本次先保存可复现的实验提交，未修改 Launcher 指向。
+
+## 最终验收（2026-10-06）
+
+| RAF Hz | 2 秒执行 tick | 2 秒实际呈现 | 开启 60Hz 限制后 1 秒 tick / 呈现 |
+| --- | --- | --- | --- |
+| 60 | 120 | 120 | 60 / 60 |
+| 120 | 120 | 237 | 60 / 60 |
+| 144 | 120 | 283 | 60 / 60 |
+| 165 | 120 | 326 | 60 / 60 |
+| 240 | 120 | 474 | 60 / 60 |
+
+无音乐和 OGG 两轮均通过五档完整测试，无 page error。高刷呈现数含检测预热，故小于 RAF 总数。额外绘制逐次检查音频统计，除实时 SDL 队列消耗外均不变，当前曲目、播放位置和 fade 不被额外绘制推进。OGG 范围为真实标题与 Stage 1；使用原作 PCM 私有转换的 `th15_01`、`th15_02`、`th15_04`。最初 OGG 夹具仅准备前两首，Stage 1 预加载 boss 曲目时失败；补齐 `th15_04` 后全部通过。这不是完整音频/所有换曲生命周期验收，也不把测试转换文件混入正式资源包。
+
+本地复现：先设置 `TH15_EMSDK` 与私有原作 `TH15_ORIGINAL_DAT`，并提供 measured fonts；运行 `node th15_web/scripts/build-sdl-application.mjs --profile`，然后 `node --test th15_web/tests/sdl/high-refresh-browser.test.mjs`。OGG 模式另设置 `TH15_HIGH_REFRESH_MUSIC` 为上述三首 OGG 所在目录。三项场景回归设置 `TH15_PRESENTATION_TEST=1`，运行 `render-loading-lifecycle-browser.test.mjs`、`archive-completion-browser.test.mjs` 和 `checkpoint-persistence-browser.test.mjs`。Release 使用 `--release`。
+
+忽略目录内报告：`artifacts/cpp/verification/high-refresh-cadence.json` 与 `high-refresh-cadence-music.json`；最终日志 `final-high-refresh-fresh-browser.log`、`final-high-refresh-music-complete-input.log`、`final-high-refresh-lifecycle.log`。源码与验收记录提交；Wasm、DAT、fonts、音乐和报告不提交。

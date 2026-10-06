@@ -112,10 +112,11 @@ EMSCRIPTEN_KEEPALIVE void th15_loop_start(){
  emscripten_request_animation_frame_loop([](double time,void* epoch)->EM_BOOL{
   if(!running||uintptr_t(epoch)!=loop_epoch)return EM_FALSE;const double begin=emscripten_get_now(),delta=previous_frame<0?0:(time-previous_frame)/1000.;previous_frame=time;
   if(suspended){cadence.reset();presentation.reset();app->graphics.presentation.reset();return EM_TRUE;}
-  // Loading time is wall-clock presentation time, never input/Replay ticks.
+  // Startup retains native 180 loading frames; subsequent loads wait for
+  // resource completion. Neither path accumulates gameplay simulation debt.
   if(app->loading_waiting()){
    if(!loading_held)clear_inputs();loading_held=true;cadence.reset();presentation.reset();app->graphics.presentation.reset();
-   if(app->pending_load){const auto deadline=app->loading_until;if(!app->complete_loading()||!app->draw_loading(false)){running=false;th15_browser_frame(0,emscripten_get_now()-begin,0);return EM_FALSE;}app->loading_until=deadline;}
+   if(!(app->loading_startup?app->advance_loading(delta):app->complete_loading())){running=false;th15_browser_frame(0,emscripten_get_now()-begin,0);return EM_FALSE;}
    app->audio_device.pump();return EM_TRUE;
   }
   if(loading_held){loading_held=false;clear_inputs();cadence.reset();window_start=0;window_ticks=0;measured_fps=60;reset_presentation_clock();return EM_TRUE;}
@@ -138,6 +139,12 @@ EMSCRIPTEN_KEEPALIVE void th15_touch_options(unsigned enabled,unsigned mode,floa
 EMSCRIPTEN_KEEPALIVE void th15_touch_controls(unsigned enabled,unsigned fire,unsigned focus,unsigned bomb,unsigned escape){using namespace th15::sdl;gestures.enabled=enabled!=0;gestures.controls(fire!=0,focus!=0,bomb,escape,0,0);}
 EMSCRIPTEN_KEEPALIVE void th15_touch_stick(float x,float y){using namespace th15::sdl;gestures.stick_x=std::isfinite(x)?std::clamp(x/32767.f,-1.f,1.f):0;gestures.stick_y=std::isfinite(y)?std::clamp(y/32767.f,-1.f,1.f):0;}
 #if TH15_DEVELOPMENT_HARNESS
+EMSCRIPTEN_KEEPALIVE int th15_probe_extra_run(){using namespace th15::sdl;if(!app||running)return 0;app->selected_stage=7;app->progress.difficulty=4;app->progress.character=0;app->selection_player.mode_flags=0;return app->begin_run();}
+EMSCRIPTEN_KEEPALIVE const float* th15_probe_background_diagnostics(){using namespace th15::sdl;static std::array<float,6> value{};if(app)value=app->graphics.presentation.background_diagnostics();return value.data();}
+// Private renderer test: measure through the scene bridge, never a published ABI.
+EMSCRIPTEN_KEEPALIVE int th15_probe_dialogue_extent(const char* text,int font){using namespace th15::sdl;return app&&app->scene()&&text?app->scene()->dialogue_host.text_extent(text,font):-1;}
+EMSCRIPTEN_KEEPALIVE int th15_probe_dialogue_request(int script){using namespace th15::sdl;return app&&app->scene()&&app->scene()->messages.request(script);}
+EMSCRIPTEN_KEEPALIVE int th15_probe_dialogue_advance(){using namespace th15::sdl;if(!app||!app->scene())return -1;auto& messages=app->scene()->messages;if(!messages.dialogue)return 0;messages.dialogue->state.clock.set(100000);if(messages.dialogue->state.wait.current>0)messages.dialogue->state.wait.set(1);if(!messages.update({1,0,0,0,0,app->progress.stage}))return -1;return messages.active()?1:0;}
 EMSCRIPTEN_KEEPALIVE const touhou::sdl::Statistics* th15_probe_graphics_statistics(){using namespace th15::sdl;return app?&app->graphics.backend.stats:nullptr;}
 EMSCRIPTEN_KEEPALIVE int th15_probe_complete_stage(){using namespace th15::sdl;return app&&app->complete_stage();}
 EMSCRIPTEN_KEEPALIVE void th15_probe_protection(unsigned frames){using namespace th15::sdl;if(app&&app->scene())app->scene()->battle.player->life.invulnerability.set(int(frames));}
@@ -149,7 +156,8 @@ EMSCRIPTEN_KEEPALIVE const float* th15_probe_presentation_reference(){using name
 EMSCRIPTEN_KEEPALIVE int th15_probe_presentation_draw(float alpha){using namespace th15::sdl;if(running||!app)return 0;return app->graphics.presentation.present(app->graphics.backend,alpha,app->pause&&app->pause->state.screen!=th15::PauseScreen::Inactive);}
 EMSCRIPTEN_KEEPALIVE void th15_probe_presentation_enable(unsigned enabled){using namespace th15::sdl;if(app){app->graphics.presentation.enabled=enabled!=0;app->graphics.presentation.reset();}}
 EMSCRIPTEN_KEEPALIVE const float* th15_probe_presentation_sample(){using namespace th15::sdl;static std::array<float,3> value{};if(app)value={app->graphics.presentation.last_alpha,app->graphics.presentation.last_x,float(app->graphics.presentation.sampled)};return value.data();}
-EMSCRIPTEN_KEEPALIVE unsigned th15_probe_loading_remaining(){using namespace th15::sdl;const auto now=SDL_GetTicks();return app&&app->loading_until>now?unsigned(app->loading_until-now):0;}
+EMSCRIPTEN_KEEPALIVE unsigned th15_probe_loading_remaining(){using namespace th15::sdl;return app&&app->loading_startup?unsigned((180-app->loading_frames)*1000/60):0;}
+EMSCRIPTEN_KEEPALIVE unsigned th15_probe_loading_pending(){using namespace th15::sdl;return app?app->pending_load:0;}
 EMSCRIPTEN_KEEPALIVE int th15_probe_tick(){return !th15::sdl::running&&th15::sdl::sample_and_tick();}
 // Diagnostic replay batches retain every update/draw and defer only window presentation.
 EMSCRIPTEN_KEEPALIVE int th15_probe_ticks(unsigned count){using namespace th15::sdl;if(running||!app||count>120)return 0;app->graphics.backend.defer=true;bool ok=true;for(unsigned i=0;i<count&&ok;i++)ok=sample_and_tick();app->graphics.backend.commit();app->graphics.backend.defer=false;return ok;}

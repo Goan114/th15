@@ -1,5 +1,11 @@
 # TH15 THCRAP topic handoff — 2026-10-06
 
+Promotion update (2026-10-07): topic commit `20bd2c8` was fast-forwarded
+into `eagler` after fetching origin/eagler `ac75051`. Existing replay diagnostics
+were preserved and integrated in a follow-up commit. Private archives, fonts,
+language ZIPs and build artifacts are excluded. Earlier isolation/deployment
+notes below describe the validation history, not current branch status.
+
 - Upstream worktree: `th15`, `main`, base `fe113b6`.
 - Eagler base: `th15-eagler`, `eagler`, `4350363`.
 - Experiment: `_scratch/th15-thcrap`, `experiment/th15-thcrap`, uncommitted

@@ -28,6 +28,7 @@ touhou::sdl::FrameCadence cadence;
 touhou::sdl::PresentationCadence presentation;bool limit_presentation_60=false;
 GameInput controls;
 SDL_Joystick* controller=nullptr;
+bool loading_held=false;
 bool running=false,suspended=false,lost_focus=false,music_enabled=true;u32 render_scale=1;
 u32 loop_epoch=0;
 double previous_frame=-1,window_start=0;
@@ -110,7 +111,15 @@ EMSCRIPTEN_KEEPALIVE void th15_loop_start(){
  using namespace th15::sdl;if(running||!app||!app->initialized)return;running=true;suspended=false;previous_frame=-1;cadence.reset();presentation.reset();if(app)app->graphics.presentation.reset();clear_inputs();window_start=0;window_ticks=0;reset_presentation_clock();app->audio_device.suspend(false);
  emscripten_request_animation_frame_loop([](double time,void* epoch)->EM_BOOL{
   if(!running||uintptr_t(epoch)!=loop_epoch)return EM_FALSE;const double begin=emscripten_get_now(),delta=previous_frame<0?0:(time-previous_frame)/1000.;previous_frame=time;
-  if(suspended){cadence.reset();presentation.reset();if(app)app->graphics.presentation.reset();return EM_TRUE;}if(presentation_start<0)presentation_start=time;if(!limit_presentation_60)presentation.advance(delta);else presentation.reset();app->graphics.presentation.enabled=presentation.high_refresh&&!limit_presentation_60;const auto ticks=cadence.advance(delta);bool ok=true;app->graphics.backend.defer=true;
+  if(suspended){cadence.reset();presentation.reset();app->graphics.presentation.reset();return EM_TRUE;}
+  // Loading time is wall-clock presentation time, never input/Replay ticks.
+  if(app->loading_waiting()){
+   if(!loading_held)clear_inputs();loading_held=true;cadence.reset();presentation.reset();app->graphics.presentation.reset();
+   if(app->pending_load){const auto deadline=app->loading_until;if(!app->complete_loading()||!app->draw_loading(false)){running=false;th15_browser_frame(0,emscripten_get_now()-begin,0);return EM_FALSE;}app->loading_until=deadline;}
+   app->audio_device.pump();return EM_TRUE;
+  }
+  if(loading_held){loading_held=false;clear_inputs();cadence.reset();window_start=0;window_ticks=0;measured_fps=60;reset_presentation_clock();return EM_TRUE;}
+  if(presentation_start<0)presentation_start=time;if(!limit_presentation_60)presentation.advance(delta);else presentation.reset();app->graphics.presentation.enabled=presentation.high_refresh&&!limit_presentation_60;const auto ticks=cadence.advance(delta);bool ok=true;app->graphics.backend.defer=true;
   unsigned completed=0;
   for(unsigned i=0;i<ticks&&ok;i++){ok=sample_and_tick();++completed;if(app->exiting||app->pending_load)break;
    // Keep every executed update/draw, but do not turn one expensive tick into
@@ -140,6 +149,7 @@ EMSCRIPTEN_KEEPALIVE const float* th15_probe_presentation_reference(){using name
 EMSCRIPTEN_KEEPALIVE int th15_probe_presentation_draw(float alpha){using namespace th15::sdl;if(running||!app)return 0;return app->graphics.presentation.present(app->graphics.backend,alpha,app->pause&&app->pause->state.screen!=th15::PauseScreen::Inactive);}
 EMSCRIPTEN_KEEPALIVE void th15_probe_presentation_enable(unsigned enabled){using namespace th15::sdl;if(app){app->graphics.presentation.enabled=enabled!=0;app->graphics.presentation.reset();}}
 EMSCRIPTEN_KEEPALIVE const float* th15_probe_presentation_sample(){using namespace th15::sdl;static std::array<float,3> value{};if(app)value={app->graphics.presentation.last_alpha,app->graphics.presentation.last_x,float(app->graphics.presentation.sampled)};return value.data();}
+EMSCRIPTEN_KEEPALIVE unsigned th15_probe_loading_remaining(){using namespace th15::sdl;const auto now=SDL_GetTicks();return app&&app->loading_until>now?unsigned(app->loading_until-now):0;}
 EMSCRIPTEN_KEEPALIVE int th15_probe_tick(){return !th15::sdl::running&&th15::sdl::sample_and_tick();}
 // Diagnostic replay batches retain every update/draw and defer only window presentation.
 EMSCRIPTEN_KEEPALIVE int th15_probe_ticks(unsigned count){using namespace th15::sdl;if(running||!app||count>120)return 0;app->graphics.backend.defer=true;bool ok=true;for(unsigned i=0;i<count&&ok;i++)ok=sample_and_tick();app->graphics.backend.commit();app->graphics.backend.defer=false;return ok;}

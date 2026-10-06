@@ -90,3 +90,9 @@ without music, native gameplay/pause/title/exit, persisted configuration after
 offline reload, and ZIP import with hosted game DATA blocked. Default-hidden
 and test-query-visible card checks also passed. Workspace evidence is retained
 in `artifacts/th15-adapter-verification.json` and its linked browser reports.
+
+Loading presentation has a one-second minimum at startup, game entry and stage
+transitions. Resource preparation counts toward that minimum; the browser waits
+without running input/Replay ticks or accumulating simulation debt. Help-page
+resource requests keep their existing behavior. This is a presentation policy,
+not a measured claim about the retail executable's exact loading duration.

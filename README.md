@@ -1,8 +1,10 @@
 This repo is uploaded on behalf of [@SteinsGateON](https://space.bilibili.com/34714121).
 
-# TH15 portable
+# th15
 
-This repository contains the source-only TH15 1.0.3 C++/SDL3 portable and Web implementation, based on Japanese 1.00b.
+[![QQ Group 1124121427](https://img.shields.io/badge/QQ%20Group-1124121427-12B7F5?logo=tencentqq)](https://qm.qq.com/q/eeUrxIltug?from=tim)
+
+A high-fidelity, portable reimplementation of 東方紺珠伝　～ Legacy of Lunatic Kingdom ver 1.00b.
 
 ## Layout
 

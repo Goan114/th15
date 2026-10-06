@@ -6,7 +6,9 @@ import {createHash} from 'node:crypto';
 
 const root=fileURLToPath(new URL('../',import.meta.url));
 const workspace=resolve(root,'..');
-const sdk=resolve(workspace,'tools/emsdk');
+const sdk=resolve(process.env.TH15_EMSDK||resolve(workspace,'tools/emsdk'));
+const emcc=['install','upstream'].map(layout=>resolve(sdk,layout,'emscripten/emcc.py')).find(existsSync);
+if(!emcc)throw Error('Emscripten compiler not found in TH15_EMSDK');
 const release=process.argv.includes('--release');
 const target=JSON.parse(readFileSync(resolve(root,'target.json'),'utf8'));
 const out=resolve(root,process.env.TH15_OUTPUT||(release?'artifacts/sdl-release':'artifacts/sdl-application'));
@@ -18,7 +20,7 @@ const common=['-O2','-g0','-std=c++17','-ffp-contract=off','-fno-strict-aliasing
 const run=args=>{
  const response=args.length>64?resolve(objects,'link.rsp.utf-8'):null;
  if(response)writeFileSync(response,args.map(a=>JSON.stringify(a)).join('\n')+'\n');
- return new Promise((resolveRun,reject)=>{const p=spawn('python',[resolve(sdk,'install/emscripten/emcc.py'),...(response?['@'+response]:args)],{cwd:root,env,windowsHide:true,stdio:['ignore','pipe','pipe']});let log='';for(const s of [p.stdout,p.stderr])s.on('data',b=>{log+=b;process.stdout.write(b);});p.on('error',reject);p.on('exit',code=>code?reject(Error('TH15 SDL build failed '+code+'\n'+log)):resolveRun());}).finally(()=>{if(response)unlinkSync(response);});
+ return new Promise((resolveRun,reject)=>{const p=spawn('python',[emcc,...(response?['@'+response]:args)],{cwd:root,env,windowsHide:true,stdio:['ignore','pipe','pipe']});let log='';for(const s of [p.stdout,p.stderr])s.on('data',b=>{log+=b;process.stdout.write(b);});p.on('error',reject);p.on('exit',code=>code?reject(Error('TH15 SDL build failed '+code+'\n'+log)):resolveRun());}).finally(()=>{if(response)unlinkSync(response);});
 };
 const files=dir=>readdirSync(resolve(root,dir),{withFileTypes:true}).flatMap(e=>e.isDirectory()?files(dir+'/'+e.name):e.name.endsWith('.cpp')?[resolve(root,dir,e.name)]:[]);
 const source=[...files('cpp/game'),...files('cpp/sdl'),...(release?[]:[resolve(root,'tests/sdl/application-exports.cpp')]),resolve(workspace,'portable/sdl/Renderer.cpp')];

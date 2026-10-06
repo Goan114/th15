@@ -20,7 +20,7 @@ struct AudioDevice::Impl final:MusicCommandOutput {
  ~Impl(){music_cache.clear();for(auto& voice:sounds)voice.reset();if(stream)SDL_DestroyAudioStream(stream);if(engine_ready)ma_engine_uninit(&engine);}
  bool attach(Voice& v){if(ma_sound_init_from_data_source(&engine,&v.decoder,MA_SOUND_FLAG_NO_SPATIALIZATION,nullptr,&v.sound)!=MA_SUCCESS)return false;v.attached=true;return true;}
  Voice* voice(u32 id){return id<sounds.size()?sounds[id].get():nullptr;}Voice* current(){return track>=0&&u32(track)<music_cache.size()?music_cache[track].get():nullptr;}
- bool music_ready()const override{return ready&&command_ready;}bool music_busy()const override{return false;}bool music_has_intro()const override{auto* t=layout.track(u32(selected_track));return t&&t->loop_start!=0;}
+ bool music_ready()const override{return owner.music_enabled&&ready&&command_ready;}bool music_busy()const override{return false;}bool music_has_intro()const override{auto* t=layout.track(u32(selected_track));return t&&t->loop_start!=0;}
  bool release_pending()const override{return false;}bool release_waiting()override{return false;}
  void preload_reset()override{owner.pause_music(true);}
  bool prepare_music(i32,const std::string& wave)override{return owner.prepare_music(wave);}
@@ -47,11 +47,14 @@ bool AudioDevice::initialize(AssetSource& resources,bool device){
  std::vector<u8> format;if(!resources.read("thbgm.fmt",format)||!a.layout.open(format.data(),format.size())){error=a.layout.error.empty()?"Missing TH15 music layout":a.layout.error;return false;}a.music_cache.resize(a.layout.count());if(a.stream)SDL_ResumeAudioStreamDevice(a.stream);a.ready=true;error.clear();return true;
 }
 bool AudioDevice::prepare_music(const std::string& value){
+ // No-music launches intentionally install no OGG files; SFX still use the mixer.
+ if(!music_enabled)return true;
  auto& a=*impl;if(!a.ready){error="Audio device not initialized";return false;}const i32 index=a.layout.original_index(wave_name(value));if(a.music_cache[index])return true;const auto& track=*a.layout.track(index);auto next=std::make_unique<Impl::Voice>();std::string filename=track.filename;filename.resize(filename.size()-4);const auto path=music_directory+"/"+filename+".ogg";auto config=ma_decoder_config_init(ma_format_f32,track.channels,track.rate);
  if(ma_decoder_init_file(path.c_str(),&config,&next->decoder)!=MA_SUCCESS){error="Unable to decode "+path;return false;}next->decoded=true;ma_uint64 length=0;if(ma_decoder_get_length_in_pcm_frames(&next->decoder,&length)!=MA_SUCCESS||length!=track.frames()){error="Music PCM frame count differs from original: "+path;return false;}ma_data_source_set_loop_point_in_pcm_frames(&next->decoder,track.loop_frame(),track.frames());if(!a.attach(*next)){error="Unable to attach music voice";return false;}ma_sound_set_looping(&next->sound,MA_TRUE);a.music_cache[index]=std::move(next);return true;
 }
 bool AudioDevice::music_file(const std::string& value){if(!prepare_music(value))return false;return music(impl->layout.original_index(wave_name(value)));}
 bool AudioDevice::music(i32 index){
+ if(!music_enabled){stop_music();return true;}
  auto& a=*impl;if(!a.ready)return false;if(index<0){stop_music();return true;}const auto* track=a.layout.track(u32(index));if(!track){error="Music index outside TH15 table";return false;}if(!prepare_music(track->filename))return false;if(auto* previous=a.current())ma_sound_stop(&previous->sound);a.track=a.selected_track=index;a.fade=a.fade_total=0;a.music_paused=false;auto* voice=a.current();ma_sound_seek_to_pcm_frame(&voice->sound,0);refresh_volume();ma_sound_start(&voice->sound);return true;
 }
 void AudioDevice::stop_music(){auto& a=*impl;if(auto* voice=a.current()){ma_sound_stop(&voice->sound);ma_sound_seek_to_pcm_frame(&voice->sound,0);}a.track=-1;a.fade=a.fade_total=0;a.music_paused=false;}

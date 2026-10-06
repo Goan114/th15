@@ -28,8 +28,8 @@ bool ApplicationState::read(const std::string& name,std::vector<u8>& bytes){
  size_t size=0;auto* data=static_cast<u8*>(SDL_LoadFile(("/assets/"+base).c_str(),&size));if(!data)return fail("Missing game asset: "+base);
  bytes.assign(data,data+size);SDL_free(data);if(bytes.size()<=1024*1024&&base.size()>=4&&base.substr(base.size()-4)!=".wav"&&base.substr(base.size()-4)!=".anm")resource_cache.emplace(base,bytes);return true;
 }
-bool ApplicationState::initialize(bool device){
- if(initialized)return fail("Application already initialized");
+bool ApplicationState::prepare_platform(){
+ if(platform_prepared)return true;
  if(SDL_GetPathInfo("/th15.dat",nullptr)){
  // Read directly into the archive owner: SDL_LoadFile plus assign kept two
  // full temporary archive buffers alive and forced an unnecessary heap growth.
@@ -40,7 +40,23 @@ bool ApplicationState::initialize(bool device){
  // The original archive contains two identical se_cardget.wav entries.
  // Preserve the first entry while rejecting genuinely ambiguous resources.
  if(name!=archive.entries[first].name||!archive.read(first,left)||!archive.read(i,right)||left!=right)return fail("Ambiguous archive asset: "+base);}}}
- if(!graphics.initialize()||!fonts.initialize()||!audio_device.initialize(*this,device))return fail(graphics.error.empty()?fonts.error.empty()?audio_device.error:fonts.error:graphics.error);
+ if(!graphics.initialize())return fail(graphics.error);platform_prepared=true;return true;
+}
+bool ApplicationState::prepare_loading(){
+ if(!prepare_platform())return false;std::vector<u8> bytes;
+ // sig.anm uses twice the logical 640x480 resolution of the game viewport.
+ loading_environment.resolution_scale=.5f;
+ if(!read("sig.anm",bytes)||!loading_animations.load(1,bytes.data(),bytes.size())||!graphics.preload(*loading_animations.resource(1)))return fail("Startup signature load failed: "+loading_animations.error+graphics.error);
+ if(!loading_animations.create(1,0))return fail("Startup signature animation failed: "+loading_animations.error);
+ if(!loading_animations.update(false)||!loading_animations.update(true))return fail("Startup signature update failed: "+loading_animations.error);
+ if(!graphics.select_target(nullptr,0)||!graphics.clear_target(0xff000000,nullptr))return fail(graphics.error);
+ ScreenViews loading_views{renderer,loading_environment};loading_views.camera(DrawCamera::Fullscreen,false);
+ for(u32 layer=0;layer<42;++layer)if(!renderer.draw_layer(loading_animations.registry.layer(layer)))return fail("Startup signature draw failed: "+renderer.error);
+ renderer.flush();graphics.present();return true;
+}
+bool ApplicationState::initialize(bool device){
+ if(initialized)return fail("Application already initialized");if(!prepare_platform())return false;
+ if(!fonts.initialize()||!audio_device.initialize(*this,device))return fail(fonts.error.empty()?audio_device.error:fonts.error);
  // Restart overlays draw their patterned fifth panel when the screen has alpha.
  // Derive this from the actual SDL surface, as the original format check does.
  environment.render_target_has_alpha=graphics.pixels(GraphicsDevice::screen)->format==touhou::graphics::PixelFormat::Bgra8;
@@ -61,6 +77,10 @@ bool ApplicationState::initialize(bool device){
  display=std::make_unique<SceneDisplay>(scheduler,animations,environment,graphics,renderer,views,captions,0,2);if(!display->initialize())return fail(display->error);
  for(u32 index=0;index<animation_updates.size();index++){auto& callback=animation_updates[index];callback.owner=this;callback.enabled=true;callback.run=index==0?[](void* p)->i32{return static_cast<ApplicationState*>(p)->animations.update(true)?1:5;}:[](void* p)->i32{return static_cast<ApplicationState*>(p)->animations.update(false)?1:5;};if(scheduler.add(callback,FramePass::Update,index==0?9:34)<0)return fail("Application animation callback registration failed");}
  camera.direction={0,0,1};camera.up={0,1,0};camera.fov=0.785398185f;
+ loading_animations.retire_resource(1);
+ loading_animations.update(false);loading_animations.update(true);
+ if(auto* signature=loading_animations.resource(1))graphics.unload(*signature);
+ loading_animations.unload(1);
  initialized=true;return begin_title(0);
 }
 ApplicationState::~ApplicationState(){title.reset();ending.reset();release_run();for(auto& c:animation_updates)scheduler.remove(c);fades.clear();display.reset();scene_effects.reset();animations.resource_release=nullptr;}

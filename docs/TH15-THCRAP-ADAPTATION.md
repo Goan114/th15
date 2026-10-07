@@ -1,5 +1,15 @@
 # TH15 THCRAP topic handoff — 2026-10-06
 
+Inter-stage black flash fix (2026-10-07, local/uncommitted): task 2 no longer
+calls `draw_loading(false)` after the departing scene composite. That call
+cleared the framebuffer to black without signature artwork. Preserve the last
+completed composite through resource preparation, then use the existing retained
+STD transition; startup, title entry and other loading tasks are unchanged.
+Actual browser transition regression PASS with the 60Hz presentation lock both
+enabled and disabled: 294,153 / 307,200 pixels retain visible scene content at
+the pending resource boundary, with no accumulated gameplay ticks on resume.
+Release WASM: `d7285b63267f82d02b46b0ad54d178868f7d8b160ab597fc3d7f483ee1026d22`.
+
 Promotion update (2026-10-07): topic commit `20bd2c8` was fast-forwarded
 into `eagler` after fetching origin/eagler `ac75051`. Existing replay diagnostics
 were preserved and integrated in a follow-up commit. Private archives, fonts,

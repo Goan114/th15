@@ -6,7 +6,7 @@ import {resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {launchBrowser} from '../../../th10_web/scripts/native/browser-launch.mjs';
 const root=fileURLToPath(new URL('../../',import.meta.url));
-test('Actual browser retains native 180-frame startup and resource-driven entry without simulation debt', {timeout:180000}, async()=>{
+for(const locked of [1,0])test('Actual browser retains native startup and visible stage transition (60Hz lock='+locked+')', {timeout:180000}, async()=>{
  assert.ok(process.env.TH15_ORIGINAL_DAT,'Set TH15_ORIGINAL_DAT');
  const fontRoot=resolve(process.env.EAGLER_FONT_ROOT||resolve(root,'assets/sdl-native/fonts'));
  const fonts=(await readdir(fontRoot)).filter(n=>n.endsWith('.bin'));
@@ -23,12 +23,19 @@ test('Actual browser retains native 180-frame startup and resource-driven entry 
   const middleLoading=await page.locator('canvas').screenshot({path:resolve(output,'loading-startup-middle.png')});
   assert(!initialLoading.equals(middleLoading),'Original loading ANM must animate, not remain a frozen screenshot');
   await page.waitForFunction(()=>fixture._th15_frame()>startupFrame,null,{timeout:15000});startup.elapsed=await page.evaluate(()=>performance.now()-started);assert.equal(startup.remaining,3000,'Native 180-frame startup wait');assert(startup.elapsed>=3000,'Startup must not be skipped');
+  await page.evaluate(locked=>fixture._th15_limit_presentation(locked),locked);
   await page.evaluate(()=>{const c=fixture;c._th15_loop_stop();window.state=()=>Array.from(c.HEAP32.subarray(c._th15_probe_state()/4,c._th15_probe_state()/4+16));window.world=()=>Array.from(c.HEAPU32.subarray(c._th15_probe_world_state()/4,c._th15_probe_world_state()/4+16));window.tick=()=>{if(!c._th15_probe_tick())throw Error('Tick failed');};window.frames=n=>{for(let i=0;i<n;i++)tick();};window.key=scan=>{c._th15_key(scan,1);tick();c._th15_key(scan,0);tick();};window.waitMenu=screen=>{for(let i=0;i<350;i++){tick();if(state()[8]===screen&&state()[9]===2)return;}throw Error('Menu timeout');};
    window.beginHold=stage=>{window.holdPromise=(async()=>{const before={remaining:c._th15_probe_loading_remaining(),pending:c._th15_probe_loading_pending(),frame:c._th15_frame()},start=performance.now();if(!before.pending||before.remaining)throw Error('Expected pending resource task without deadline');c._th15_loop_start();while(c._th15_frame()===before.frame)await new Promise(requestAnimationFrame);const after={elapsed:performance.now()-start,pending:c._th15_probe_loading_pending(),state:state(),world:world()};c._th15_loop_stop();if(after.pending||after.state[2]!==stage)throw Error('Preparation did not complete');const advanced=after.state[7]-before.frame;if(advanced<1||advanced>4||after.world[1]!==advanced)throw Error('Loading accumulated simulation ticks '+JSON.stringify({before,after}));return {before,after};})();};
    waitMenu(1);key(28);waitMenu(5);key(28);waitMenu(6);key(28);waitMenu(7);key(28);for(let i=0;i<250;i++){if(c._th15_probe_loading_pending()>0){beginHold(1);return;}tick();}throw Error('No entry loading');});
   const entry=await page.evaluate(()=>holdPromise);assert.equal(entry.before.remaining,0);
-  await page.evaluate(()=>{fixture._th15_probe_protection(100000);frames(245);if(!fixture._th15_probe_complete_stage())throw Error('Complete stage failed');for(let i=0;i<140;i++){if(fixture._th15_probe_loading_pending()>0){beginHold(2);return;}tick();}throw Error('No next-stage loading');});
+  await page.evaluate(()=>{fixture._th15_probe_protection(100000);frames(245);if(!fixture._th15_probe_complete_stage())throw Error('Complete stage failed');for(let i=0;i<140;i++){if(fixture._th15_probe_loading_pending()>0){
+   const c=fixture,ptr=c._th15_probe_pixels(),pixels=c.HEAPU8.subarray(ptr,ptr+640*480*4);let visible=0;
+   for(let j=0;j<pixels.length;j+=4)if(pixels[j]+pixels[j+1]+pixels[j+2]>24)visible++;
+   if(visible<640*480*.1)throw Error('Inter-stage loading replaced the scene with a black screen: '+visible);
+   window.transition={visible,total:640*480};beginHold(2);return;}tick();}throw Error('No next-stage loading');});
   const next=await page.evaluate(()=>holdPromise);assert.equal(next.before.remaining,0);assert.deepEqual(errors,[]);
+  await page.locator('canvas').screenshot({path:resolve(output,'loading-next-stage.png')});
+  await writeFile(resolve(output,'loading-transition-lock-'+locked+'.json'),JSON.stringify(await page.evaluate(()=>transition),null,2));
   await writeFile(resolve(output,'loading-buffer.json'),JSON.stringify({passed:true,startup,entry,next,scope:'Actual SDL browser RAF and original private archive/fonts; native 180-frame startup with animated ANM, resource-driven game loading, no accumulated gameplay ticks on resume. Music disabled; desktop Chromium. Native async resource workers are not claimed cycle-identical.'},null,2));console.log(JSON.stringify({startup:startup.elapsed,entry:entry.after.elapsed,next:next.after.elapsed}));
  }finally{await browser?.close();await new Promise(r=>server.close(r));}
 });

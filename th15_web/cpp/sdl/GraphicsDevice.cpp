@@ -13,7 +13,7 @@ bool GraphicsDevice::initialize(){
 bool GraphicsDevice::preload(AnmResource& file,bool low_color){
     if(resources.find(&file)!=resources.end())return true;
     std::vector<u32> handles;handles.reserve(file.textures.size());
-    for(const auto& source:file.textures){Texture texture;texture.renderScale=source.kind==AnmTexture::Kind::RenderTarget?render_scale:1;
+    for(const auto& source:file.textures){Texture texture;texture.renderScale=source.kind==AnmTexture::Kind::RenderTarget||source.kind==AnmTexture::Kind::Blank?render_scale:1;
         if(!texture.image.load(source,low_color)){error="Unable to prepare ANM texture: "+source.name;for(const auto id:handles){backend.release(id);textures.erase(id);}return false;}
         const auto id=next_handle++;textures.emplace(id,std::move(texture));handles.push_back(id);backend.prepare(id);
     }

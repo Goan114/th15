@@ -2,9 +2,7 @@
 #include "ThpracUi.hpp"
 #include <eagler/thprac/PracticePointer.hpp>
 #include "../game/GameKeyboard.hpp"
-#if TH15_DEVELOPMENT_HARNESS
 #include "../game/BombReisen.hpp"
-#endif
 #include "../../../portable/sdl/FrameCadence.hpp"
 #include "../../../portable/sdl/PresentationCadence.hpp"
 #include "../../../portable/input/TouchController.hpp"
@@ -63,9 +61,13 @@ touhou::input::TouchState touch_state(){
  touhou::input::TouchState value;if(!app||!app->scene()||!app->session)return value;
  if(app->pause&&app->pause->state.screen!=th15::PauseScreen::Inactive)return value;
  if(app->progress.replay){value.context=3;return value;}
- auto& stage=*app->scene();if(stage.messages.active()){value.context=2;return value;}
+ auto& stage=*app->scene();
  auto& player=*stage.battle.player;auto& motion=player.motion;
- value.context=1;value.instance=app->progress.stage;value.ready=player.life.state==1&&!(app->progress.scene_flags&(4|0x70|0x4000|0x10000));
+ value.context=stage.messages.active()?2:1;value.instance=app->progress.stage;value.ready=player.life.state==1&&!(app->progress.scene_flags&(4|0x70|0x4000|0x10000));
+ // A shield hit is temporarily state 4 before BombReisen cancels death.
+ // Suspend movement for that tick without discarding the held finger.
+ if(app->progress.character==3&&player.life.state==4&&stage.battle.session.bomb_state==1&&stage.battle.bomb&&!(app->progress.scene_flags&(4|0x70|0x4000|0x10000)))
+  value.retain_motion=static_cast<BombReisen*>(stage.battle.bomb.get())->charges>0;
  value.x=motion.position.x;value.y=motion.position.y;value.fast=float(motion.normal_speed)/128;value.slow=float(motion.focus_speed)/128;
  value.min_x=-184;value.max_x=184;value.min_y=32;value.max_y=432;return value;
 }
@@ -181,7 +183,17 @@ EMSCRIPTEN_KEEPALIVE void th15_loop_start(){
   if(completed||presented)th15_browser_frame(ok?1:0,emscripten_get_now()-begin,completed);if(!ok)running=false;return running?EM_TRUE:EM_FALSE;
  },reinterpret_cast<void*>(uintptr_t(++loop_epoch)));
 }
-EMSCRIPTEN_KEEPALIVE void th15_touch(unsigned type,int id,float x,float y){using namespace th15::sdl;if(type>2||!std::isfinite(x)||!std::isfinite(y))return;const float px=x*640,py=y*480;if(practice_pointers.route(type,id,type==0&&ThpracUi::captures_pointer(px,py))){ThpracUi::mouse(type==0?1:type==2?2:0,px,py);return;}if(app&&app->practice.enabled&&app->practice.flip_screen_y)y=1-y;gestures.pointer(type,id,x,y,SDL_GetTicks(),touch_state(),false);}
+EMSCRIPTEN_KEEPALIVE void th15_touch(unsigned type,int id,float x,float y){
+ using namespace th15::sdl;if(type>2||!std::isfinite(x)||!std::isfinite(y))return;
+ const float px=x*640,py=y*480;using Route=eagler::thprac::PracticePointer::TouchRoute;
+ const auto decision=practice_pointers.route_touch(type,id,type==0&&ThpracUi::captures_pointer(px,py),type==0&&ThpracUi::passive_pointer(px,py),px,py);
+ if(decision.route==Route::Pending)return;
+ if(decision.route==Route::Tap){ThpracUi::mouse(1,decision.x,decision.y);ThpracUi::mouse(2,px,py);return;}
+ if(decision.route==Route::Ui){ThpracUi::mouse(type==0?1:type==2?2:0,px,py);return;}
+ const bool flip=app&&app->practice.enabled&&app->practice.flip_screen_y;const auto state=touch_state();const auto now=SDL_GetTicks();
+ if(decision.route==Route::BeginGame)gestures.pointer(0,id,decision.x/640,flip?1-decision.y/480:decision.y/480,now,state,false);
+ gestures.pointer(type,id,x,flip?1-y:y,now,state,false);
+}
 EMSCRIPTEN_KEEPALIVE void th15_thprac_mouse(int type,float x,float y){th15::sdl::ThpracUi::mouse(type,x,y);}
 EMSCRIPTEN_KEEPALIVE void th15_touch_cancel(){using namespace th15::sdl;practice_pointers.reset();gestures.cancel();ThpracUi::cancel_pointer();if(app){app->touch={};if(app->scene())app->scene()->battle.player->motion.touch={};}}
 EMSCRIPTEN_KEEPALIVE void th15_touch_options(unsigned enabled,unsigned mode,float sensitivity,unsigned two_finger,unsigned double_tap){using namespace th15::sdl;gestures.enabled=enabled!=0;gestures.mode=mode<=3?int(mode):0;gestures.unlimited=mode==1;gestures.sensitivity=std::isfinite(sensitivity)?std::clamp(sensitivity,.25f,4.f):1;gestures.two_finger=two_finger!=0;gestures.double_tap=double_tap!=0;gestures.cancel();}

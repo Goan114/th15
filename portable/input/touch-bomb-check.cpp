@@ -27,5 +27,21 @@ extern "C" __attribute__((export_name("verify"))) int verify(){
  if(!drag.sample(live,11,false,false).motion)return 7;
  if(drag.sample(hit,12,false,false).motion||drag.active())return 8;
  drag.reset();if(drag.sample(live,13,false,false).keys[88])return 9;
+ // Every Reisen shield layer has a one-tick hit state, not a respawn.
+ TouchController shield;shield.pointer(0,20,.5f,.5f,0,live,false);
+ TouchState absorbed=hit;absorbed.retain_motion=true;
+ for(int layer=0;layer<3;++layer){
+  if(shield.sample(absorbed,20+layer*10,false,false).motion||!shield.active())return 10;
+  shield.pointer(1,20,.55f+layer*.01f,.5f,21+layer*10,absorbed,false);
+  if(!shield.active())return 11;
+  shield.pointer(1,20,.56f+layer*.01f,.5f,22+layer*10,live,false);
+  const auto resumed=shield.sample(live,23+layer*10,false,false);
+  if(!resumed.motion||resumed.x<=live.x)return 12;
+ }
+ // No shield left: ordinary death still cancels, as do release and pause.
+ shield.sample(hit,60,false,false);if(shield.active())return 13;
+ shield.pointer(0,21,.5f,.5f,61,live,false);shield.pointer(2,21,.5f,.5f,62,absorbed,false);if(shield.active())return 14;
+ shield.pointer(0,22,.5f,.5f,63,live,false);TouchState paused=absorbed;paused.context=0;
+ shield.sample(paused,64,false,false);if(shield.active())return 15;
  return 0;
 }

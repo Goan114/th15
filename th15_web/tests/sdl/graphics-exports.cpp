@@ -24,6 +24,7 @@ EMSCRIPTEN_KEEPALIVE int graphics_initialize_scaled(u32 scale){graphics=std::mak
 void graphics_depth_quad(float,float,float,float,float,u32);
 EMSCRIPTEN_KEEPALIVE int graphics_chapter_initialize(const u8* data,u32 size){
  if(!screen_probe)return 0;auto& s=*screen_probe;
+ s.environment.render_target_has_alpha=true;
  if(!s.animations.load(1,data,size)||!graphics->preload(*s.animations.resource(1)))return 0;
  chapter_schedule=std::make_unique<AnmDrawSchedule>(s.scheduler,s.animations,s.renderer,*graphics,s.views);
  return s.animations.create(1,241,-1,0)!=0;

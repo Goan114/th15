@@ -1,8 +1,9 @@
 import {spawn} from 'node:child_process';
-import {readFileSync,readdirSync,mkdirSync,existsSync,writeFileSync} from 'node:fs';
+import {readFileSync,readdirSync,mkdirSync,existsSync,writeFileSync,unlinkSync} from 'node:fs';
 import {resolve,relative} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {createHash} from 'node:crypto';
+import {commonInclude,commonThpracHeaders} from '../../portable/common-root.mjs';
 
 const root=fileURLToPath(new URL('../',import.meta.url));
 const workspace=resolve(root,'..');
@@ -13,11 +14,16 @@ const out=resolve(root,process.env.TH15_OUTPUT||('artifacts/sdl-graphics'));
 const objects=resolve(out,'objects');mkdirSync(objects,{recursive:true});
 const env={...process.env,EM_CONFIG:resolve(sdk,'.emscripten'),EMSDK:sdk,EMCC_CORES:'4'};
 const common=['-O2','-g0','-std=c++17','-ffp-contract=off','-fno-strict-aliasing','-fno-exceptions','-fno-rtti','-DTH_NATIVE_PLATFORM=1',`-DTH15_DEVELOPMENT_HARNESS=${release?0:1}`,'--use-port=sdl3'];
-const run=args=>new Promise((resolveRun,reject)=>{const p=spawn('python',[resolve(sdk,'install/emscripten/emcc.py'),...args],{cwd:root,env,windowsHide:true,stdio:['ignore','pipe','pipe']});let log='';for(const s of [p.stdout,p.stderr])s.on('data',b=>{log+=b;process.stdout.write(b);});p.on('error',reject);p.on('exit',code=>code?reject(Error('TH15 SDL build failed '+code+'\n'+log)):resolveRun());});
+common.push('-I'+commonInclude);
+const run=args=>{
+ const response=args.length>64?resolve(objects,'link.rsp.utf-8'):null;
+ if(response)writeFileSync(response,args.map(a=>JSON.stringify(a)).join('\n')+'\n');
+ return new Promise((resolveRun,reject)=>{const p=spawn('python',[resolve(sdk,'install/emscripten/emcc.py'),...(response?['@'+response]:args)],{cwd:root,env,windowsHide:true,stdio:['ignore','pipe','pipe']});let log='';for(const s of [p.stdout,p.stderr])s.on('data',b=>{log+=b;process.stdout.write(b);});p.on('error',reject);p.on('exit',code=>code?reject(Error('TH15 SDL build failed '+code+'\n'+log)):resolveRun());}).finally(()=>{if(response)unlinkSync(response);});
+};
 const files=dir=>readdirSync(resolve(root,dir),{withFileTypes:true}).flatMap(e=>e.isDirectory()?files(dir+'/'+e.name):e.name.endsWith('.cpp')?[resolve(root,dir,e.name)]:[]);
 const source=[...files('cpp/game'),resolve(root,'cpp/sdl/GraphicsDevice.cpp'),resolve(root,'cpp/sdl/FontDevice.cpp'),resolve(root,'cpp/sdl/GraphicsImages.cpp'),resolve(root,'cpp/sdl/PresentationFrame.cpp'),resolve(root,'tests/sdl/graphics-exports.cpp'),resolve(workspace,'portable/sdl/Renderer.cpp')];
 const headerFiles=dir=>readdirSync(dir,{withFileTypes:true}).flatMap(e=>e.isDirectory()?headerFiles(resolve(dir,e.name)):/\.(h|hpp|inc)$/.test(e.name)?[resolve(dir,e.name)]:[]);
-const headers=[...headerFiles(resolve(root,'cpp')),...headerFiles(resolve(workspace,'portable/sdl')),...headerFiles(resolve(workspace,'portable/input'))].sort();
+const headers=[...headerFiles(resolve(root,'cpp')),...headerFiles(resolve(workspace,'portable/sdl')),...headerFiles(resolve(workspace,'portable/input')),...commonThpracHeaders].sort();
 const sha=b=>createHash('sha256').update(b).digest('hex');
 const headerHash=sha(headers.map(p=>p+sha(readFileSync(p))).join('\n'));
 const settings=JSON.stringify([common,headerHash]);

@@ -10,8 +10,9 @@ The matching launcher changes are on `experiment/th15-multiplayer-launcher`.
 Its base is `eb27a88`. The network submodule extends common `e02347f` with
 TH15 spectator timing identity, pinned at
 `dd93c944ce2f2830e99be9c8dba7ff2ac645f548` on
-`experiment/th15-multiplayer-common`. This dependency commit is local; publish
-that common branch before sharing a remote checkout of the title branch.
+`experiment/th15-multiplayer-common` in `Goan114/eagler-common`. The original
+dependency commit is now published; the network submodule URL points to that
+fork so a fresh checkout can fetch the exact locked revision.
 Canonical TH15 and launcher checkouts have not been promoted or overwritten.
 
 Two or three pilots independently select Reimu, Marisa, Sanae or Reisen.

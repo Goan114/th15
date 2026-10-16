@@ -15,8 +15,8 @@ files.set('/lab-config.mjs',resolve(lab,'browser-config.mjs'));files.set('/adapt
 for(const name of ['runtime.html','runtime.mjs'])files.set('/runtime/'+name,resolve(lab,name));
 files.set('/runtime/keyboard.mjs',resolve(root,'th15_web/sdl-runtime/keyboard.mjs'));
 for(const name of ['th15-application.mjs','th15-application.wasm'])files.set('/runtime/'+name,resolve(buildRoot,name));
-const fonts=process.env.TH15_LAB_FONTS||resolve(root,'../../th15-eagler/th15_web/assets/sdl-native/fonts');
-for(const name of [...Array.from({length:13},(_,n)=>'font'+n+'.bin'),'cp932.bin','blend4444.bin']){const file=resolve(fonts,name);if(!existsSync(file))throw Error('Set TH15_LAB_FONTS to measured fonts');files.set('/fonts/'+name,file);}
+const fonts=process.env.TH15_LAB_FONTS||resolve(root,'build-eagler/fonts');
+for(const name of [...Array.from({length:8},(_,n)=>'font'+n+'.bin'),'cp932.bin','blend4444.bin']){const file=resolve(fonts,name);if(!existsSync(file))throw Error('Set TH15_LAB_FONTS to the packaged measured font tables');files.set('/fonts/'+name,file);}
 if(process.env.TH15_LAB_DATA&&existsSync(process.env.TH15_LAB_DATA))files.set('/input/th15.dat',process.env.TH15_LAB_DATA);
 const git=dir=>execFileSync('git',['rev-parse','HEAD'],{cwd:dir,encoding:'utf8'}).trim();
 const identity={schema:'presentation-lab/build/1',game:'th15',commit:git(root),commonCommit:git(resolve(root,'third_party/eagler-common')),wasm:build.sha256,loader:sha256(readFileSync(resolve(buildRoot,'th15-application.mjs'))),instrumented:true,profile:'presentation-lab',localChanges:true,sourceFiles:{...build.sources,...build.headers,...Object.fromEntries(['adapter.mjs','browser-config.mjs','runtime.mjs','runtime.html'].map(name=>['portable/presentation-lab/'+name,sha256(readFileSync(resolve(lab,name)))]))},dataAvailable:files.has('/input/th15.dat'),evidence:'partial Player X observer; no complete consumer admission; diagnostic only',sampling:'original Draw packet references; unknown for missing owners/state'};

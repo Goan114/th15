@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {launchBrowser} from '../../../../th15-eagler/th10_web/scripts/native/browser-launch.mjs';
+import {launchBrowser} from '../../th10_web/scripts/native/browser-launch.mjs';
 const browser=await launchBrowser({args:['--enable-unsafe-swiftshader','--autoplay-policy=no-user-gesture-required']});
 const page=await browser.newPage(),errors=[];page.on('pageerror',e=>{errors.push(String(e));console.error(String(e));});page.on('console',m=>{if(m.type()==='error')console.error(m.text());});
 try{
@@ -8,7 +8,12 @@ try{
  const result=await page.evaluate(async()=>{
   const ctl=presentationLab.controller,c=ctl.runtime.core,driver=ctl.driver;ctl.freeze();
   const blocked=driver.advanceOneTick();if(blocked.status!=='blocked-loading')throw Error('Expected loading receipt '+JSON.stringify(blocked));
-  await new Promise(r=>setTimeout(r,1100));
+  const loadingTick=c._th15_frame(),loadingDeadline=performance.now()+10000;
+  while(ctl.observer.readGate()){
+   if(performance.now()>loadingDeadline)throw Error('Frozen startup loading did not finish');
+   await new Promise(r=>setTimeout(r,100));
+  }
+  if(c._th15_frame()!==loadingTick)throw Error('Loading advanced a game tick while frozen');
   const state=()=>Array.from(c.HEAP32.subarray(c._th15_probe_state()/4,c._th15_probe_state()/4+16));
   const tick=()=>{const receipt=driver.advanceOneTick();if(receipt.status!=='advanced')throw Error(JSON.stringify(receipt));};
   const menu=n=>{for(let i=0;i<350;i++){tick();if(state()[8]===n&&state()[9]===2)return;}throw Error('Menu '+n+' timed out '+state());};
